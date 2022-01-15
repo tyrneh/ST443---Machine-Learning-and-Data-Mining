@@ -1,0 +1,183 @@
+---
+title: "Lab4 Cross Validation and Bootstrap"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Cross Validation
+```{r}
+library(ISLR)
+Auto = Auto
+plot(mpg ~ horsepower, data = Auto)
+dim(Auto)
+```
+
+Randomly split the full data into half training and half testing
+```{r}
+attach(Auto)
+set.seed(1234)
+train = sample(x = 392, size = 196)
+head(train)
+```
+linear model: regree mpg on horsepower using training data set
+```{r}
+lm_fit = lm(formula = mpg ~ horsepower,
+            data = Auto,
+            subset = train)
+```
+
+`-train` index below selects only the observations that are not in the training set
+MSE OF 196 observations in the validation set
+```{r}
+mean((mpg - predict(object = lm_fit, newdata = Auto))[-train] ^ 2)
+```
+
+we use `poly()` function to estimate the test error for the polynomial regressions
+```{r}
+lm_fit2 = lm(
+  formula = mpg ~ poly(horsepower, 2),
+  data = Auto,
+  subset = train
+)
+mean((mpg - predict(object = lm_fit2, newdata = Auto))[-train] ^ 2)
+```
+
+```{r}
+lm_fit3 = lm(
+  formula = mpg ~ poly(horsepower, 3),
+  data = Auto,
+  subset = train
+)
+mean((mpg - predict(object = lm_fit3, newdata = Auto))[-train] ^ 2)
+```
+
+***
+## Leave-one-out cv (LOOCV)
+```{r}
+library(boot)
+glm_fit = glm(formula = mpg ~ horsepower, data = Auto)
+```
+`cv.glm()` can be used to perform cv, if we use `glm()` to fit a model without passing in the family argument, then it performs linear regression like `lm()` function
+```{r}
+## Very slow (does not use formula (5.2) on page 180 in ISLR):
+cv.glm(Auto, glm_fit)$delta
+```
+write a simple function to use formua (5.2) 
+
+$\text{CV}_{n} = \frac{1}{n}\sum_{i=1}^n \left(\frac{y_i-\hat{y}_i}{1-h_i}\right)^2$
+
+```{r}
+loocv = function(fit) {
+  h = lm.influence(fit)$hat
+  mean((residuals(fit) / (1 - h)) ^ 2)
+}
+loocv(glm_fit)
+```
+
+Compute LOOCV and K-fold-CV errors v.s. degree of the polynomial:
+```{r}
+cv_error1 = rep(0, 5)
+cv_error2 = rep(0, 5)
+cv_error5 = rep(0, 5)
+degree = 1:5
+for (i in degree) {
+  glm_fit = glm(mpg ~ poly(horsepower, i), data = Auto)
+  ## CV errors using formula (5.2)
+  cv_error1[i] = loocv(glm_fit)
+  ## CV errors using naive LOOCV
+  cv_error2[i] = cv.glm(Auto, glm_fit)$delta[1]
+  ## CV errors using K-fold-CV
+  cv_error5[i] = cv.glm(Auto, glm_fit, K = 5)$delta[1]
+  # you can try 5 fold CV by setting `K=5` in `cv_glm` function
+}
+```
+Note the value of K is the number of groups which the data should be split to estimate the CV error, by default `K=n`, i.e. LOOCV.
+
+Plot the cv errors v.s. degree of the polynomial:
+```{r}
+plot(degree, cv_error1, type = "b")
+lines(degree, cv_error2, col = "red")
+lines(degree, cv_error5, type = "b", col = "blue")
+```
+
+***
+
+## Bootstrap
+
+We use `Portfolio` data set in the ISLR package
+`alpha_fn()` function takes as input the (X,Y) data as well as a vector indicating which observations should be used to estimate $\alpha$. Note that $\alpha = \min \text{var}[\alpha X + (1 - \alpha Y)]$.
+```{r}
+alpha_fn = function(data, index) {
+  X = data$X[index]
+  Y = data$Y[index]
+  # solution of alpha s.t. min. var
+  alpha = (var(Y) - cov(X, Y)) / (var(X) + var(Y) - 2 * cov(X, Y))
+  return(alpha)
+}
+```
+
+randomly select 100 observations from 1 to 100 with replacement, i.e. constract a new bootstrap data and compute the corresponding alpha
+```{r}
+set.seed(1)
+alpha_fn(data = Portfolio, index = sample(x = 1:100, size = 100, replace = T))
+```
+
+Bootstrap using `for` loop:
+```{r}
+boot_alpha = rep(0, 1000)
+for(i in 1:1000){
+  boot_index = sample(x = 1:100, size = 100, replace = T)
+  boot_alpha[i] = alpha_fn(data = Portfolio, index = boot_index)
+}
+mean(boot_alpha); sd(boot_alpha)
+```
+
+Use `boot()` function to produce `R = 1000` bootstrap estimates for alpha
+```{r}
+boot(Portfolio, alpha_fn, R = 1000)
+```
+
+### Estimating the accuracy of a linear regression model
+```{r}
+boot_fn = function(data, index) {
+  coef(lm(mpg ~ horsepower, data = data, subset = index))
+}
+```
+
+This returns the intercept and slope estimates for the linear regression model
+```{r}
+boot_fn(Auto, 1:392)
+set.seed(1234)
+boot_fn(Auto, sample(392, 392, replace = T))
+```
+
+Now we use `boot()` to compute the standard errors of 1000 bootstrap estimates for the intercept and slope
+```{r}
+boot(Auto, boot_fn, R = 1000)
+```
+
+Compare with standard formula results for the regression coefficients in a linear model
+```{r}
+summary(lm(mpg ~ horsepower, data = Auto))$coef
+```
+What can you conclude from the different results?
+
+Redo everything for polynomial regression with `degree=2`
+```{r}
+boot_fn = function(data, index)
+  coefficients(lm(
+    mpg ~ horsepower + I(horsepower ^ 2),
+    data = data,
+    subset = index
+  ))
+```
+
+Bootstrap with 1000 replications
+```{r}
+set.seed(1234)
+boot(Auto, boot_fn, 1000)
+summary(lm(mpg ~ horsepower + I(horsepower ^ 2), data = Auto))$coef
+```

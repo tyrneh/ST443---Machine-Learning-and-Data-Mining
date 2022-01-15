@@ -1,0 +1,229 @@
+---
+title: "Lab3"
+date: 11 October 2020
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Stock Market Data
+
+```{r}
+library(ISLR)
+# ?Smarket
+Smarket = Smarket
+dim(Smarket)
+summary(Smarket)
+pairs(Smarket)
+# cor(Smarket) # Error in cor(Smarket) : 'x' must be numeric
+cor(Smarket[,-9])
+
+```
+
+***
+
+### Logistic Regression
+
+fit a gernalized linear regression using a logit link function, set distribution of the response variable to be binomial
+```{r}
+glm_fit = glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume,
+              data = Smarket,
+              family = binomial)
+summary(glm_fit)
+glm_probs = predict(glm_fit, type = "response")
+glm_probs[1:10]
+```
+What is `type = "response"`? Read the help document: `?predict.glm`.
+
+What it should be, `up` or `down`, when predicted probabilities close to 1?
+```{r}
+contrasts(Smarket$Direction)
+glm_pred = rep("Down", 1250)
+```
+
+For predicted probabilities greater than 0.5, assign Y to be "Up"; otherwise assign Y to be "Down"
+```{r}
+glm_pred[glm_probs > .5] = "Up"
+```
+Confusion matrix:
+```{r}
+table(glm_pred, Smarket$Direction)
+mean(glm_pred == Smarket$Direction)
+```
+
+### Training & testing datasets
+
+Generate training (before year 2005) and testing data sets (on year 2005)
+
+ID for training data
+```{r}
+train = (Smarket$Year < 2005)
+```
+Create testing data set
+```{r}
+Smarket_test = Smarket[!train,] # excalmation: Logic Negation
+```
+Create testing data for Y
+```{r}
+Direction_test = Smarket$Direction[!train]
+```
+Logistic regression on the training data set
+```{r}
+glm_fit = glm(
+  Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume,
+  data = Smarket,
+  family = binomial,
+  subset = train
+)
+```
+
+Predicted probabilities for the testing data set
+```{r}
+glm_probs = predict(glm_fit, Smarket_test, type = "response")
+```
+Sample size for the testing data
+```{r}
+dim(Smarket_test)
+```
+
+For predicted probabilities greater than 0.5, assign Y to be "Up"; otherwise assign Y to be "Down"
+```{r}
+glm_pred = rep("Down", 252)
+glm_pred[glm_probs > .5] = "Up"
+```
+Confusion matrix
+```{r}
+table(glm_pred, Direction_test)
+
+```
+Proportation of correct classification
+```{r}
+mean(glm_pred==Direction_test)
+```
+
+Misclassfication error rate - `glm_pred` is the predicted Y for testing data and `Direction_test` is the true Y for testing data
+```{r}
+mean(glm_pred != Direction_test)
+```
+
+Redo the logistic regression using only two predictors, 1st lag and 2nd lag
+```{r}
+glm_fit = glm(
+  Direction ~ Lag1 + Lag2,
+  data = Smarket,
+  family = binomial,
+  subset = train
+  )
+glm_probs = predict(glm_fit, Smarket_test, type = "response")
+glm_pred = rep("Down", 252)
+glm_pred[glm_probs > .5] = "Up"
+```
+Proportation of make correct classification
+```{r}
+table(glm_pred,Direction_test)
+```
+Misclassfication error rate
+```{r}
+mean(glm_pred!=Direction_test)
+```
+
+***
+
+### Linear Discriminant Analysis
+
+```{r}
+library(MASS) 
+```
+Perform LDA on the traning data set using only two predictors, 1st lag and 2nd lag
+```{r}
+lda_fit = lda(Direction ~ Lag1 + Lag2, data = Smarket, subset = train)
+lda_fit
+```
+The LDA output here directely refers to our **Lecture 2 slides Page 14**:
+
+ + `Prior probabilities of groups` give $\hat\pi_k = n_k/n$, i.e., $\hat\pi_1 = 0.492$ and $\hat\pi_2 = 0.508$.
+ + `Group means` give $\hat\mu_k = \frac{1}{n_k} \sum_{i:y_i=k} x_i$ for each class.
+
+```{r}
+names(predict(lda_fit, Smarket_test))
+lda_pred_posterior = predict(lda_fit, Smarket_test)$posterior
+head(lda_pred_posterior)
+```
+ + `$posterior` will give you the predicted posterior probability $P(Y=k|X=x)$, see **Lecture 2 slides Page 21**.
+
+```{r}
+lda_pred = predict(lda_fit, Smarket_test)$class
+head(lda_pred)
+```
+ + And `$class` will give you the predicted classification output.
+
+Confusion matrix
+```{r}
+table(lda_pred, Direction_test)
+```
+Misclassfication error rate
+```{r}
+mean(lda_pred != Direction_test)
+```
+
+***
+
+### Lab 3 Quadratic Discriminant Analysis
+
+Perform QDA on the traning data set using only two predictors, 1st lag and 2nd lag
+```{r}
+qda_fit = qda(Direction ~ Lag1 + Lag2, data = Smarket, subset = train)
+qda_fit
+qda_pred = predict(qda_fit, Smarket_test)$class
+```
+Confusion matrix
+```{r}
+table(qda_pred, Direction_test)
+```
+Misclassfication error rate
+```{r}
+mean(qda_pred != Direction_test)
+```
+
+***
+
+### k-Nearest Neighbors
+
+Perform K-nearest neighbours on the traning data set
+```{r}
+library(class)
+```
+Create training data for X
+```{r}
+train_X = cbind(Smarket$Lag1, Smarket$Lag2)[train, ]
+```
+Create testing data for X
+```{r}
+test_X = cbind(Smarket$Lag1, Smarket$Lag2)[!train,]
+```
+Create training data for Y
+```{r}
+train_Direction = Smarket$Direction[train]
+```
+
+Set `k = 1`
+```{r}
+knn_pred = knn(train_X, test_X, train_Direction, k = 1)
+table(knn_pred, Direction_test)
+mean(knn_pred != Direction_test)
+```
+Set `k = 3`
+```{r}
+knn_pred = knn(train_X, test_X, train_Direction, k = 3)
+table(knn_pred,Direction_test)
+mean(knn_pred!=Direction_test)
+```
+And if you also want to get the predicted probabilities, you need to set argument `prob = T`,
+and invoke `attributes()` function to extract the predicted probabilities.
+```{r}
+knn_pred = knn(train_X, test_X, train_Direction, k = 3, prob = T)
+knn_pred = attributes(knn_pred)$prob
+head(knn_pred)
+```

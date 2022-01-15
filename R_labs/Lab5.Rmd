@@ -1,0 +1,236 @@
+---
+title: "Lab5 Best Subset Selection, Forward and Backward Stepwise Selection"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Lab 5.0: Data Preparing
+```{r}
+library(ISLR)
+summary(Hitters)
+head(Hitters$Salary)
+sum(is.na(Hitters$Salary))
+```
+
+There are some missing values in `Salary`. Remove those missing values:
+```{r}
+Hitters = na.omit(Hitters)
+dim(Hitters)
+```
+Check any missing values?
+```{r}
+sum(is.na(Hitters))
+```
+***
+
+## Lab 5.1: Best Subset Selection
+
+`regsubsets()` function perfroms best subset selection by identifying the best
+model that contains a given number of predictors, where best is quantified by 
+*RSS*.
+```{r}
+library(leaps)
+regfit_full = regsubsets(Salary ~ ., data = Hitters)
+reg_summary = summary(regfit_full)
+```
+It gives by default best-subsets up to size 8. Let us increase to 19:
+```{r, results='hold'}
+regfit_full = regsubsets(Salary ~ ., data = Hitters, nvmax = 19)
+reg_summary = summary(regfit_full)
+names(reg_summary)
+reg_summary$rsq
+```
+Plot RSS, adjusted Rsq, Cp and BIC for all of the models at once, this would help
+us decide which model to select:
+```{r, results='hold'}
+par(mfrow=c(2,2))
+plot(reg_summary$rss, xlab="Number of Variables", ylab="RSS")
+
+# Plot adjusted R2 vs Number of Variables
+plot(reg_summary$adjr2, xlab="Number of Variables", ylab="Adjusted RSq", type="l")
+# which_max() function is used to identify the location of the maximum point of a vector
+best_model = which.max(reg_summary$adjr2)
+# Plot a red dot to indicate the model with the largest adjusted R2
+points(best_model, reg_summary$adjr2[best_model], col="red", cex=2, pch=20)
+
+## In a similar fashion, we can plot Cp and BIC
+plot(reg_summary$cp, xlab="Number of Variables", ylab="Cp", type="l")
+best_model = which.min(reg_summary$cp)
+points(best_model, reg_summary$cp[best_model], col="red", cex=2, pch=20)
+
+plot(reg_summary$bic, xlab="Number of Variables", ylab="BIC", type="l")
+best_model = which.min(reg_summary$bic)
+points(best_model, reg_summary$bic[best_model], col="red", cex=2, pch=20)
+```
+`regsubsets()` function has a build-in `plot()` command which can display the 
+selected variable for the best model with a given number of predictors.
+```{r, fig.height = 10, fig.width = 10, fig.align = "center"}
+par(mfrow=c(2,2))
+plot(regfit_full, scale="r2")
+plot(regfit_full, scale="adjr2")
+plot(regfit_full, scale="Cp")
+plot(regfit_full, scale="bic")
+```
+Top row of each plot contains a black square for each variable selected according 
+to the optimal model associated with that statistic, e.g., BIC choose 
+six-variable model we use `coef()` to see the coefficient estimates associated 
+with this model:
+```{r}
+coef(regfit_full, id = 6)
+```
+***
+
+## Lab 5_2: Forward and Backward Stepwise Selection
+
+`regsubsets()` function can perform *forward* stepwise selection as
+```{r, fig.height = 10, fig.width = 10, fig.align = "center"}
+regfit_fwd = regsubsets(Salary ~ .,
+                        data = Hitters,
+                        nvmax = 19,
+                        method = "forward")
+summary(regfit_fwd)
+
+par(mfrow = c(2, 2))
+plot(regfit_fwd, scale = "r2")
+plot(regfit_fwd, scale = "adjr2")
+plot(regfit_fwd, scale = "Cp")
+plot(regfit_fwd, scale = "bic")
+```
+
+Or *backward* stepwise selection:
+```{r, fig.height = 10, fig.width = 10, fig.align = "center"}
+regfit_bwd = regsubsets(Salary ~ .,
+                        data = Hitters,
+                        nvmax = 19,
+                        method = "backward")
+summary(regfit_bwd)
+
+par(mfrow = c(2, 2))
+plot(regfit_bwd, scale="r2")
+plot(regfit_bwd, scale="adjr2")
+plot(regfit_bwd, scale="Cp")
+plot(regfit_bwd, scale="bic")
+```
+Check the coefficient estimates associated with models (size 7) using different 
+approaches, e.g., best subset selection, forward stepwise selection and backward
+stepwise selection.
+```{r}
+coef(regfit_full, 7)
+coef(regfit_fwd, 7)
+coef(regfit_bwd, 7)
+```
+***
+
+## Lab 5_3 Choosing among models using Validation Set Approach and Cross-Validation
+
+Validation Set Approach: randomly split the data into training set and validation data
+```{r}
+set.seed(1)
+train = sample(seq(263), 180, replace=FALSE)
+```
+We now apply `resubsets()` on the training data to perform forward stepwise selection
+```{r}
+regfit_fwd = regsubsets(Salary ~ .,
+                        data = Hitters[train, ],
+                        nvmax = 19,
+                        method = "forward")
+```
+
+We make a model matrix by `model.matrix` from the testing data
+```{r}
+test_mat = model.matrix(Salary ~ ., data = Hitters[-train, ])
+```
+
+Try all models with size i ranges from 1 to 19
+```{r}
+val_errors = rep(0, 19)
+for(i in 1:19){
+  ## Get the coefficient estimates associated with model (size i) using forward 
+  ##   stepwise method
+  coef_i = coef(regfit_fwd, id = i)
+  ## Get the prediction for the tesing data using the corresponding columns in
+  ##   the design matrix X multipled by the estimated coefficients in "coef_i" 
+  pred_test = test_mat[, names(coef_i)] %*% coef_i
+  ## Compute the mean square error
+  val_errors[i] = mean((Hitters$Salary[-train] - pred_test) ^ 2)
+}
+which.min(val_errors)
+coef(regfit_fwd, 5)
+```
+
+Plot of Root MSE vs model size for validation data and training data
+```{r, fig.align = "center"}
+par(mfrow=c(1,1))
+plot(sqrt(val_errors) ,ylab="Root MSE", ylim=c(300,400), pch=19, type="b")
+points(sqrt(regfit_fwd$rss[-1]/180), col="red", pch=19, type="b")
+legend("topright",legend=c("Validation","Training"), col=c("black","red"), pch=19)
+```
+
+There is no `predict()` method for `regsubsets()`, we summarize the steps for
+our computation above and write our own version of the predict function as
+```{r}
+predict_regsubsets = function(object, newdata, id, ...) {
+  form = as.formula(object$call[[2]])
+  mat = model.matrix(form, newdata)
+  coef_i = coef(object, id = id)
+  mat[, names(coef_i)] %*% coef_i
+}
+```
+
+```{r}
+val_errors2 =rep(0, 19)
+for(i in 1:19){
+  val_errors2[i] =mean((Hitters$Salary[-train] - predict_regsubsets(regfit_fwd, Hitters[-train,], id=i))^2)  
+}
+```
+
+Repeat the above steps for computing test error rate for models with size from 1 to 19
+```{r}
+val_errors2 =rep(0, 19)
+for(i in 1:19){
+  val_errors2[i] =mean((Hitters$Salary[-train] - predict_regsubsets(regfit_fwd, Hitters[-train,], id=i))^2)  
+}
+```
+
+Check whether our written function could provide the same result or not
+```{r}
+sum(abs(val_errors2 - val_errors))
+```
+
+K-Cross Validation Approach using forward stepwise selection (FSS), this part is
+very important, since it provides you a sample code of writing K-fold CV
+```{r}
+K =10
+set.seed(11)
+folds = sample(rep(1:10, length = nrow(Hitters)))
+folds
+table(folds)
+```
+We initialize a error matrix with row (10 different folds) and column (19 different predictors)
+```{r}
+cv_errors =matrix(0, 10, 19)
+```
+We write a for loop that performs cross-validation, in the kth fold, the elemetns
+of folds that equal `k` are in the test set and the remiander are in the training set
+```{r}
+for(k in 1:10){
+  fit_fwd = regsubsets(Salary~., data=Hitters[folds!=k,], nvmax=19, method="forward")
+  for(i in 1:19){
+    pred =predict_regsubsets(fit_fwd, Hitters[folds==k,], id=i)
+    cv_errors[k,i] =mean((Hitters$Salary[folds==k]-pred)^2)
+  }
+}
+```
+Average of the cv_error over all 10 folds
+```{r}
+rmse_cv = sqrt(apply(cv_errors, 2, mean))
+```
+Plot of Root MSE vs model size and choose the optimal model size
+```{r}
+plot(rmse_cv, ylab="Root MSE", xlab="Model Size", pch=19, type="b")
+min_point = which.min(rmse_cv)
+points(min_point, rmse_cv[min_point], col="red", cex=2, pch=20)
+```

@@ -1,0 +1,153 @@
+---
+title: "ST443 Lab02"
+date: 07 October 2020
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## lab 2.1 Install and activate packages 
+```{r cars}
+# install.packages("MASS")
+# install.packages("ISLR")
+
+library(MASS)
+library(ISLR)
+```
+
+## lab 2.2 Simple Linear Regression
+
+```{r}
+# fix(Boston)
+names(Boston)
+# ?Boston
+# lm.fit=lm(medv~lstat)
+lm.fit = lm(medv ~ lstat, data = Boston)
+attach(Boston)
+lm.fit = lm(medv ~ lstat)
+lm.fit
+summary(lm.fit)
+names(lm.fit)
+lm.fit$coefficients
+coef(lm.fit)
+```
+## lab 2.3 Inference
+Confidence intervals for the coefficient estimates
+```{r}
+confint(lm.fit) 
+```
+
+Preditive values, confidence intervals and prediction intervals for the prediction of medv for a given value of `lstat`
+$CI(\hat{y}_i)  = CI(\hat{\beta}_0 + x_i \cdot \hat{\beta}_1)$,
+$PI(\hat{y}_i)  = CI(\hat{\beta}_0 + x_i \cdot \hat{\beta}_1 + e_i)$,
+```{r}
+predict(lm.fit, data.frame(lstat = (c(5, 10, 15))))
+predict(lm.fit, data.frame(lstat = (c(5, 10, 15))), interval = "confidence")
+predict(lm.fit, data.frame(lstat = (c(5, 10, 15))), interval = "prediction")
+```
+
+## lab 2.4 Diagnostic
+"NICE": normality, independent, constant variance, $E{(e)} = 0$
+```{r}
+plot(lstat, medv)
+abline(lm.fit)
+abline(lm.fit, lwd = 3)
+abline(lm.fit, lwd = 3, col = "red")
+plot(lstat, medv, col = "red")
+plot(lstat, medv, pch = 20)
+plot(lstat, medv, pch = "+")
+par(mfrow = c(2, 2))
+plot(lm.fit)
+par(mfrow = c(1, 1))
+```
+
+plot of fitted values vs (standardized) residuals
+```{r}
+plot(predict(lm.fit), residuals(lm.fit))
+plot(predict(lm.fit), rstudent(lm.fit))
+```
+
+plot of leverage statistics
+```{r}
+plot(hatvalues(lm.fit))
+which.max(hatvalues(lm.fit))
+```
+
+## lab 2.5 Multiple Linear Regression
+```{r}
+lm.fit1 = lm(medv ~ lstat + age, data = Boston)
+summary(lm.fit1)
+lm.fit2 = lm(medv ~ ., data = Boston)
+summary(lm.fit2)
+lm.fit3 = lm(medv ~ . - age, data = Boston)
+summary(lm.fit3)
+lm.fit4 <- lm(medv ~ lstat + age + tax + rad, data = Boston)
+summary(lm.fit4)
+anova(lm.fit1, lm.fit4)  ## F test, anova() function performs a hypothesis test comparing the two models
+```
+
+### Interaction term `:`.
+eg.: `ptratio` and `ptratio` are not excluded from the model if using `*`. Instead, `:` should be used:
+```{r}
+summary(lm(medv ~ . - age + ptratio*tax, data = Boston))
+summary(lm(medv ~ . - age - ptratio - tax + ptratio*tax, data = Boston)) # ptratio and tax are not excluded
+summary(lm(medv ~ . - age - ptratio - tax + ptratio:tax, data = Boston)) # ptratio and tax are excluded
+```
+
+### Variables Transformation
+Square transformation of `rm` is not recognized
+```{r}
+summary(lm(medv ~ . - age + rm ^ 2,    data = Boston))
+```
+You need `I()` to isolate the transformation. In other words, `I()` inhibits the interpretation of operators such as "+", "-", "*" and "^" as formula operators, so they are used as arithmetical operators:
+```{r}
+summary(lm(medv ~ . - age + I(rm ^ 2), data = Boston))
+```
+
+It is OK to do log transformation without `I()`:
+```{r}
+summary(lm(medv ~ . - age + log(rm), data = Boston)) 
+
+```
+
+## lab 2.6 Categorical Predictors
+```{r}
+# ?Carseats
+names(Carseats)
+```
+
+Predict sales (child car seat sales) in 400 locations on a number of predictors
+```{r}
+lm.fit = lm(Sales ~ . + Income:Advertising + Price:Age, data = Carseats)
+summary(lm.fit)
+```
+
+`ShelveLoc`: an indicator of the quality of the shelving location, i.e. the space within a store in which the car seat is displayed at each location
+```{r}
+attach(Carseats)
+contrasts(ShelveLoc)
+contrasts(Urban)
+```
+
+## lab 2.7 Writing Functions
+```{r}
+f1 = function(x){
+  d = median(x) - mean(x)
+  return(d)
+}
+f1(x = c(1,2,6))
+```
+
+```{r}
+# LoadLibraries
+# LoadLibraries()
+LoadLibraries = function() {
+  library(ISLR)
+  library(MASS)
+  print("The libraries have been loaded.")
+}
+LoadLibraries
+LoadLibraries()
+```

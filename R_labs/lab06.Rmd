@@ -1,0 +1,162 @@
+---
+title: "Lab 6: Ridge Regression, Lasso and Principal Component Regression"
+output: html_document
+---
+
+We will use `glmnet` package in order to perfrom ridge regression and Lasso
+```{r}
+library(glmnet)
+library(ISLR)
+summary(Hitters)
+```
+
+## Lab 6.1: Ridge regression
+We will perform *Ridge Regression*  and *Lasso* to predict `Salary` on the `Hitters` data.
+Be sure to remove the missing values:
+```{r}
+Hitters <-na.omit(Hitters)
+```
+`glmnet` does not use formula language
+```{r}
+x <-model.matrix(Salary~., data=Hitters)[,-1]
+y <-Hitters$Salary
+```
+
+`glmnet()` function has an alpha argument that determines what type of model is fit.
+`alpha=0` corresponds to the ridge regression and `alpha=1` corresponds to Lasso by default.
+`glmnet()` function standardizes the variables so that they are on the same scale. 
+```{r}
+fit.ridge <-glmnet(x, y, alpha=0)
+## plot of the solution path, i.e. estimated coefficients vs log (lambda), where lambda is the tuning parameter
+plot(fit.ridge, xvar="lambda", label= TRUE)
+plot(fit.ridge, xvar="dev", label= TRUE)
+```
+
+k-fold cross validation for to determine the optimal tuning parameter, lambda. By default `k` is set to be 10
+```{r}
+cv.ridge <-cv.glmnet(x, y, alpha=0)
+```
+
+Plot of CV mse vs log (lambda)
+```{r}
+plot(cv.ridge)
+```
+
+Coefficent vector corresponding to the mse which is within one standard error of the lowest mse using the best lambda.
+```{r}
+coef(cv.ridge)
+```
+
+Coefficient vector corresponding to the lowest mse using the best lambda
+```{r}
+coef(glmnet(x,y,alpha=0, lambda=cv.ridge$lambda.min))
+```
+
+Of course, you can try a range of lambda values for the ridge regression
+Here we try a grid of values ranging from `lambda=10^10` to `lambda=10^{-2}`, 100 different lambda values
+```{r}
+grid <-10^seq(10, -2, length=100)
+fit.ridge1 <-glmnet(x,y,alpha=0, lambda=grid)
+```
+21 rows (one for each predictor plus an intercept) and 100 columns (one for each value of lambda)
+```{r}
+dim(coef(fit.ridge1))
+```
+What is the 50th lambda value and the corresponding estimated coefficients by the ridge regression?
+```{r}
+fit.ridge1$lambda[50]
+coef(fit.ridge1)[,50]
+```
+***
+
+## Lab 6.2: LASSO
+```{r}
+fit.lasso <-glmnet(x,y)
+plot(fit.lasso, xvar="lambda", label= TRUE)
+plot(fit.lasso, xvar="dev", label= TRUE)
+cv.lasso <-cv.glmnet(x, y)
+plot(cv.lasso)
+```
+
+coefficent vector corresponding to the mse which is within one standard error of the lowest mse using the best lambda.
+```{r}
+coef(cv.lasso)
+```
+coefficient vector corresponding to the lowest mse using the best lambda
+```{r}
+coef(glmnet(x,y, lambda=cv.lasso$lambda.min))
+```
+
+Validation set approach to select best lambda in Lasso
+```{r}
+set.seed(1)
+train <-sample(seq(263), 180, replace=FALSE)
+lasso.train <-glmnet(x[train,], y[train])
+lasso.train
+pred.test <-predict(lasso.train, x[-train,])
+dim(pred.test)
+rmse <-sqrt(apply((y[-train]-pred.test)^2,2,mean))
+plot(log(lasso.train$lambda), rmse, type="b", xlab="Log(lambda)")
+lambda.best <-lasso.train$lambda[order(rmse)[1]]
+lambda.best
+```
+***
+
+## Lab 6.3: Principal Component Regression
+We will use `pls` package to perfrom Principal Component Regression
+```{r}
+library(pls)
+set.seed(123)
+train = sample(1:nrow(Hitters), 180)
+```
+
+`pcr()` to perform Principal Component Regression. 
+If `validation = "CV"`, cross-validation is performed. If `validation = "LOO"`, leave-one-out cross-validation is performed.
+If `scale` is `TRUE`, X is standardized.
+```{r}
+fit.pcr = pcr(Salary ~ ., data = Hitters[train,], validation = "LOO", scale = T)
+summary(fit.pcr)
+```
+
+`selectNcomp()` Choosing the best number of components in PCR. `method = "onesigma"` implies the "1 stdandard error rule".
+```{r}
+selectNcomp(fit.pcr, method = "onesigma", plot = TRUE)
+```
+
+Plot "Number of Components" vs "Standardized Coefficients"
+```{r}
+bhats = fit.pcr$coefficients[,1,]
+plot(c(1, 19), range(bhats), type = "n",
+     xlab = "Number of Components", ylab = "Standardized Coefficients")
+for(j in 1:4){
+  lines(1:19, bhats[j,], type = "S", col = j, lty = j, lwd = 3)
+}
+legend(x = "topleft", legend = rownames(bhats)[1:4], col = 1:4, lty = 1:4, lwd = 3)
+for(j in 5:19){
+  lines(1:19, bhats[j,], type = "S", col = "gray", lty = 1, lwd = 1)
+}
+```
+
+Prediction on test set.
+```{r}
+pmse = rep(NA, 19)
+for(j in 1:19){
+  yhat = predict(fit.pcr, ncomp = j, newdata = Hitters[-train,])
+  pmse[j] = mean((yhat - Hitters$Salary[-train])^2)
+}
+plot(pmse, type = "o", xlab = "Number of Components", ylab = "PMSE")
+```
+
+Recover the original coefficients.
+```{r}
+fit.pcr = pcr(Salary ~ ., data = Hitters, scale = T)
+bhat.pcr = fit.pcr$coefficients[,1,19]
+sd = apply(x, 2, sd)
+bhat.pcr.rec = bhat.pcr/sd
+```
+
+Comparing to `lm()`:
+```{r}
+bhat.lm = coef(lm(Salary ~ ., data = Hitters))[-1]
+cbind(bhat.pcr, bhat.pcr.rec, bhat.lm)
+```

@@ -1,0 +1,138 @@
+# Lab 3 Stock Market Data
+
+library(ISLR)
+?Smarket
+Smarket = Smarket
+dim(Smarket)
+summary(Smarket)
+pairs(Smarket)
+cor(Smarket) # Error in cor(Smarket) : 'x' must be numeric
+cor(Smarket[,-9])
+
+# Lab 3 Logistic Regression
+
+# fit a gernalized linear regression using a logit link function, set distribution of the response variable to be binomial
+glm_fit = glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume,
+              data = Smarket,
+              family = binomial)
+summary(glm_fit)
+glm_probs = predict(glm_fit, type = "response")
+glm_probs[1:10]
+
+contrasts(Smarket$Direction)
+glm_pred = rep("Down", 1250)
+# For predicted probabilities greater than 0.5, assign Y to be "Up"; otherwise assign Y to be "Down"
+glm_pred[glm_probs > .5] = "Up"
+# Confusion matrix
+table(glm_pred, Smarket$Direction)
+(507 + 145) / 1250
+mean(glm_pred == Smarket$Direction)
+
+# Generate training (before year 2005) and testing data sets (on year 2005) 
+
+# ID for training data
+train = (Smarket$Year < 2005)
+# Create testing data set
+Smarket_test = Smarket[!train,] # excalmation: Logic Negation
+# Create testing data for Y
+Direction_test = Smarket$Direction[!train]
+
+# logistic regression on the training data set
+glm_fit = glm(
+  Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume,
+  data = Smarket,
+  family = binomial,
+  subset = train
+)
+
+# Predicted probabilities for the testing data set
+glm_probs = predict(glm_fit, Smarket_test, type = "response")
+
+# Sample size for the testing data
+dim(Smarket_test)
+
+# For predicted probabilities greater than 0.5, assign Y to be "Up"; otherwise assign Y to be "Down"
+glm_pred = rep("Down", 252)
+glm_pred[glm_probs > .5] = "Up"
+
+# Confusion matrix
+table(glm_pred, Direction_test)
+# Proportation of make correct classification
+mean(glm_pred==Direction_test)
+# Misclassfication error rate
+# glm_pred is the predicted Y for testing data and Direction_test is the true Y for testing data
+mean(glm_pred!=Direction_test)
+
+# Redo the logistic regression using only two predictors, 1st lag and 2nd lag
+glm_fit = glm(
+  Direction ~ Lag1 + Lag2,
+  data = Smarket,
+  family = binomial,
+  subset = train
+)
+glm_probs = predict(glm_fit, Smarket_test, type = "response")
+glm_pred = rep("Down", 252)
+glm_pred[glm_probs > .5] = "Up"
+# Proportation of make correct classification
+table(glm_pred,Direction_test)
+# Misclassfication error rate
+mean(glm_pred!=Direction_test)
+
+
+# Lab 3 Linear Discriminant Analysis
+
+library(MASS) 
+# Perform LDA on the traning data set using only two predictors, 1st lag and 2nd lag
+lda_fit = lda(Direction ~ Lag1 + Lag2, data = Smarket, subset = train)
+lda_fit
+names(predict(lda_fit, Smarket_test))
+lda_pred_posterior = predict(lda_fit, Smarket_test)$posterior
+head(lda_pred_posterior)
+lda_pred = predict(lda_fit, Smarket_test)$class
+head(lda_pred)
+
+# Confusion matrix
+table(lda_pred, Direction_test)
+# Misclassfication error rate
+mean(lda_pred != Direction_test)
+
+
+# Lab 3 Quadratic Discriminant Analysis
+# Perform QDA on the traning data set using only two predictors, 1st lag and 2nd lag
+qda_fit = qda(Direction ~ Lag1 + Lag2, data = Smarket, subset = train)
+qda_fit
+qda_pred = predict(qda_fit, Smarket_test)$class
+
+# Confusion matrix
+table(qda_pred, Direction_test)
+# Misclassfication error rate
+mean(qda_pred != Direction_test)
+
+
+# Lab 3 k Nearest Neighbors
+# Perform K-nearest neighbours on the traning data set
+library(class)
+# Create training data for X
+train_X = cbind(Smarket$Lag1, Smarket$Lag2)[train, ]
+# Create testing data for X
+test_X = cbind(Smarket$Lag1, Smarket$Lag2)[!train,]
+# Create training data for Y
+train_Direction = Smarket$Direction[train]
+
+# Set k=1
+knn_pred = knn(train_X, test_X, train_Direction, k = 1)
+table(knn_pred, Direction_test)
+mean(knn_pred != Direction_test)
+
+# Set k=3
+knn_pred = knn(train_X, test_X, train_Direction, k = 3)
+table(knn_pred,Direction_test)
+mean(knn_pred!=Direction_test)
+
+# And if you also want to get the predicted probabilities, you need to set
+#   argument "prob = T", And invoke "attributes()" function to 
+#   extract the predicted probabilities.
+
+knn_pred = knn(train_X, test_X, train_Direction, k = 3, prob = T)
+knn_pred = attributes(knn_pred)$prob
+head(knn_pred)
